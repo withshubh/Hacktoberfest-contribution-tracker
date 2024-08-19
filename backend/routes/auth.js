@@ -145,7 +145,6 @@ router.get("/languages", async (req, res) => {
   }
 });
 
-
 // Route to fetch the logged-in user's PRs during Hacktoberfest
 router.get("/prs", async (req, res) => {
   const username = req.user?.username || req.user?.login;
@@ -176,6 +175,22 @@ router.get("/prs", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Error fetching pull requests" });
   }
+});
+
+router.get("/logout", (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      return res.status(500).json({ message: "Error logging out" });
+    }
+    // Clear the session cookie
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Error destroying session" });
+      }
+      res.clearCookie("connect.sid"); // Replace with your session cookie name if different
+      res.status(200).json({ message: "Logged out successfully" });
+    });
+  });
 });
 
 module.exports = router;
