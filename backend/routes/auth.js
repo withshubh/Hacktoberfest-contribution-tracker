@@ -82,20 +82,36 @@ router.get("/social-accounts", async (req, res) => {
 });
 
 router.get("/languages", async (req, res) => {
-  const username = req.user.login; // Assuming user login info is stored in req.user
+  console.log("Languages route accessed");
+
+  const username = req.user?.login; // Ensure the user is logged in
+  if (!username) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
 
   try {
+    console.log(`Fetching repos for user: ${username}`);
     const repos = await axios.get(`https://api.github.com/users/${username}/repos`, {
       headers: { Authorization: `token ${process.env.GITHUB_TOKEN}` },
     });
 
     const languageMap = {};
 
+    // Fetch languages for each repo and accumulate byte usage
     for (const repo of repos.data) {
+      console.log(`Fetching languages for repo: ${repo.name}`);
       const { data: languages } = await axios.get(repo.languages_url, {
         headers: { Authorization: `token ${process.env.GITHUB_TOKEN}` },
       });
 
+      if (Object.keys(languages).length === 0) {
+        console.log(`No languages found for repo: ${repo.name}`);
+        continue;
+      }
+
+      console.log(`Languages for repo: ${repo.name}`, languages);
+
+      // Accumulate language byte counts
       for (const [lang, bytes] of Object.entries(languages)) {
         if (!languageMap[lang]) {
           languageMap[lang] = 0;
@@ -104,18 +120,31 @@ router.get("/languages", async (req, res) => {
       }
     }
 
-    const totalBytes = Object.values(languageMap).reduce((acc, bytes) => acc + bytes, 0);
-    const languagePercentages = Object.entries(languageMap).map(([lang, bytes]) => ({
-      language: lang,
-      percentage: ((bytes / totalBytes) * 100).toFixed(2),
-    }));
+    // Check if there are any languages to process
+    if (Object.keys(languageMap).length === 0) {
+      console.log("No languages data found for user.");
+      return res.status(200).json([]);
+    }
 
-    res.status(200).json(languagePercentages);
+    const totalBytes = Object.values(languageMap).reduce((acc, bytes) => acc + bytes, 0);
+
+    // Calculate percentages and sort them
+    const languagePercentages = Object.entries(languageMap)
+      .map(([lang, bytes]) => ({
+        language: lang,
+        percentage: ((bytes / totalBytes) * 100).toFixed(2),
+      }))
+      .sort((a, b) => b.percentage - a.percentage) // Sort by percentage, descending
+      .slice(0, 5); // Only keep top 5 languages
+
+    console.log("Top 5 languages with percentages:", languagePercentages);
+    res.status(200).json(languagePercentages); // Send only the top 5 languages
   } catch (error) {
     console.error("Error fetching languages:", error);
     res.status(500).json({ error: "Error fetching languages" });
   }
 });
+
 
 // Route to fetch the logged-in user's PRs during Hacktoberfest
 router.get("/prs", async (req, res) => {
